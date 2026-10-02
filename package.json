@@ -1,0 +1,42 @@
+{
+  "name": "dsh-session-context",
+  "version": "0.1.0",
+  "description": "Inject configured files as session-start context into top-level DeepSeek Harness agents, re-entering it after compaction",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "session-start",
+    "context"
+  ],
+  "license": "MIT",
+  "author": "Yanzuo Lu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YanzuoLu/dsh-session-context.git"
+  },
+  "homepage": "https://github.com/YanzuoLu/dsh-session-context#readme",
+  "bugs": {
+    "url": "https://github.com/YanzuoLu/dsh-session-context/issues"
+  },
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-agent": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  }
+}

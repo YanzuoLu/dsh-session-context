@@ -1,0 +1,12 @@
+# dsh-session-context bundle patch: mounts the plugin on the profile root so it
+# observes every agent's `agent/pre-step`, including agents composed from
+# presets. It injects nothing until the profile's own cordis.patch.yml names
+# the files, for example:
+#
+#   - id: session-context
+#     config:
+#       files: [~/.config/dsh/session-context.md]
+
+- insert:
+    - id: session-context
+      name: dsh-session-context
