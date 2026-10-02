@@ -7,7 +7,8 @@
  * configured files are read fresh and entered as one user-role context
  * message, so the content appears once at session start and again after
  * every compaction that dropped it. A resumed session that still carries the
- * message is left untouched.
+ * message is left untouched; one that never received it, such as a session
+ * migrated from another agent, gets it at its next step.
  *
  * @module dsh-session-context
  */
@@ -25,8 +26,8 @@ const Source = z.union(['startup', 'resume', 'compact'])
 export const Config = z.object({
   files: z.array(z.string()).default([])
     .description('Absolute paths (`~/` allowed) whose contents are injected, in order. Read fresh on every injection.'),
-  sources: z.array(Source).default(['startup', 'compact'])
-    .description('When to inject: `startup` (new session, including /new), `resume` (resumed session that never received the context), `compact` (after compaction dropped it).'),
+  sources: z.array(Source).default(['startup', 'resume', 'compact'])
+    .description('When to inject: `startup` (new session, including /new), `resume` (resumed session that never received the context, such as one migrated from another agent), `compact` (after compaction dropped it).'),
   rootOnly: z.boolean().default(true)
     .description('Inject only into top-level agents, never into subagents (spawn, fork, workflow children).'),
   template: z.string().default('<session-context>\n{content}\n</session-context>')

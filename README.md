@@ -1,6 +1,6 @@
 # dsh-session-context
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that injects the contents of configured files into the main agent's context when a session starts, and injects them again after compaction removes them. It is the dsh counterpart of a Claude Code `SessionStart` hook (matcher `startup|clear|compact`) whose stdout becomes additional context.
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that injects the contents of configured files into the main agent's context when a session starts, and injects them again whenever they are missing: after compaction removes them, or in a resumed session that never received them (for example one migrated from Claude Code or Codex). It is the dsh counterpart of a Claude Code `SessionStart` hook (matcher `startup|clear|compact`) whose stdout becomes additional context.
 
 ## Why
 
@@ -15,7 +15,7 @@ Before each model step, the plugin checks whether its context message is still i
 | New session, including `/new` in dsh-tui | Injected before the first prompt (`startup`) |
 | Compaction removed the message | Injected again at the next step (`compact`) |
 | Resumed session that still has the message | Nothing injected, so no duplicate |
-| Resumed session that never had the message | Injected only if `sources` contains `resume` |
+| Resumed session that never had the message, including one migrated with `dsh-tui migrate` | Injected at the next step (`resume`) |
 | Subagent from `subagent` (spawn) or a workflow | Nothing injected |
 | Subagent from `subagent_fork` | Inherits the parent's message. It gets a one-time notice telling it to ignore that message |
 
@@ -26,7 +26,7 @@ The files are read again on every injection, so edits apply without a restart. A
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `files` | `[]` | Absolute paths (`~/` allowed), joined in order. |
-| `sources` | `[startup, compact]` | Which of `startup`, `resume`, and `compact` inject. |
+| `sources` | `[startup, resume, compact]` | Which of `startup`, `resume`, and `compact` inject. Drop `resume` to leave sessions that predate the plugin, or were migrated from another agent, without the context. |
 | `rootOnly` | `true` | Skip subagents (sessions with `delegationDepth > 0`). |
 | `template` | `<session-context>\n{content}\n</session-context>` | Wrapper text. `{content}` is replaced by the file contents. |
 | `subagentNotice` | see `index.js` | Notice for forked subagents that inherited the message. Set it to `''` to disable. |

@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-context",
-  "version": "0.1.0",
-  "description": "Inject configured files as session-start context into top-level DeepSeek Harness agents, re-entering it after compaction",
+  "version": "0.1.1",
+  "description": "Inject configured files as session-start context into top-level DeepSeek Harness agents, re-entering it whenever it is missing: after compaction or in a resumed session that never received it",
   "keywords": [
     "dsh",
     "deepseek-harness",
