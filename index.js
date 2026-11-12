@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { renderSkillContent } from '@deepseek-ai/dsh-skill'
 import z from '@deepseek-ai/schemastery'
 
 export const name = 'session-context'
@@ -26,12 +27,14 @@ const Source = z.union(['startup', 'resume', 'compact'])
 export const Config = z.object({
   files: z.array(z.string()).default([])
     .description('Absolute paths (`~/` allowed) whose contents are injected, in order. Read fresh on every injection.'),
+  skills: z.array(z.string()).default([])
+    .description('Skill names injected after the files, each rendered exactly as dsh renders a `/name` invocation. Loaded fresh on every injection.'),
   sources: z.array(Source).default(['startup', 'resume', 'compact'])
     .description('When to inject: `startup` (new session, including /new), `resume` (resumed session that never received the context, such as one migrated from another agent), `compact` (after compaction dropped it).'),
   rootOnly: z.boolean().default(true)
     .description('Inject only into top-level agents, never into subagents (spawn, fork, workflow children).'),
   template: z.string().default('<session-context>\n{content}\n</session-context>')
-    .description('Model-facing wrapper; `{content}` is replaced by the joined file contents.'),
+    .description('Model-facing wrapper for `files`; `{content}` is replaced by the joined file contents. Skills keep their native rendering.'),
   subagentNotice: z.string().default('Every <session-context> block earlier in this conversation was written for the main session agent only. You are a delegated subagent: ignore those instructions.')
     .description('With `rootOnly`, entered once into a forked subagent that inherited the context from its parent. Empty disables it.'),
 })
@@ -70,21 +73,58 @@ function missingSource(history) {
 export function apply(ctx, config) {
   const files = config.files.map(expandPath)
   const sources = new Set(config.sources)
-  const warnedMissing = new Set()
+  const warned = new Set()
+  const warnOnce = (key, format, ...args) => {
+    if (!warned.has(key)) ctx.logger.warn(format, ...args)
+    warned.add(key)
+  }
 
   /** @returns {Promise<string>} joined contents of the configured files that exist. */
-  async function readContent() {
+  async function readFiles() {
     const parts = []
     for (const file of files) {
       try {
         parts.push((await readFile(file, 'utf8')).trim())
       } catch (error) {
         if (error.code !== 'ENOENT') throw error
-        if (!warnedMissing.has(file)) ctx.logger.warn('session-context: %s does not exist; skipped', file)
-        warnedMissing.add(file)
+        warnOnce(file, 'session-context: %s does not exist; skipped', file)
       }
     }
     return parts.filter(Boolean).join('\n\n')
+  }
+
+  /**
+   * @param {import('@deepseek-ai/dsh-agent').Agent} agent - agent receiving the skills.
+   * @param {AbortSignal} signal - step cancellation.
+   * @returns {Promise<string[]>} native renderings of the configured skills that resolve.
+   */
+  async function renderSkills(agent, signal) {
+    if (config.skills.length === 0) return []
+    const registry = ctx.get('skills')
+    if (registry === undefined) {
+      warnOnce('skills', 'session-context: no skill registry is mounted; skills skipped')
+      return []
+    }
+    const lookup = { cwd: await ctx.get('workingDirectory')?.ensure(agent, signal), signal, scope: agent }
+    const rendered = []
+    for (const skillName of config.skills) {
+      const skill = await registry.get(skillName, lookup)
+      if (skill === undefined) warnOnce(`skill:${skillName}`, 'session-context: skill %s is not available; skipped', skillName)
+      else rendered.push(renderSkillContent(skill))
+    }
+    return rendered
+  }
+
+  /**
+   * @param {import('@deepseek-ai/dsh-agent').Agent} agent - agent receiving the context.
+   * @param {AbortSignal} signal - step cancellation.
+   * @returns {Promise<string>} the complete context text, empty when nothing resolves.
+   */
+  async function composeContext(agent, signal) {
+    const fileContent = await readFiles()
+    const parts = fileContent === '' ? [] : [config.template.replaceAll('{content}', fileContent)]
+    parts.push(...await renderSkills(agent, signal))
+    return parts.join('\n\n')
   }
 
   /**
@@ -97,7 +137,7 @@ export function apply(ctx, config) {
     source: { kind: name, ...source },
   })
 
-  ctx.on('agent/pre-step', async ({ agent, step }, next) => {
+  ctx.on('agent/pre-step', async ({ agent, step, signal }, next) => {
     const decision = await next()
     // A step-1 wake with nothing to say is not a turn the model answers; wait for real input.
     if (decision.kind !== 'enter' || (step === 1 && decision.messages.length === 0)) return decision
@@ -115,9 +155,10 @@ export function apply(ctx, config) {
     if (ours('instructions')) return decision
     const trigger = missingSource(history)
     if (!sources.has(trigger)) return decision
-    const content = await readContent()
+    const content = await composeContext(agent, signal)
+    signal.throwIfAborted()
     if (content === '') return decision
-    const message = contextMessage(config.template.replaceAll('{content}', content), { form: 'instructions', trigger })
+    const message = contextMessage(content, { form: 'instructions', trigger })
     return { ...decision, messages: [message, ...decision.messages] }
   })
 }

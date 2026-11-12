@@ -19,16 +19,17 @@ Before each model step, the plugin checks whether its context message is still i
 | Subagent from `subagent` (spawn) or a workflow | Nothing injected |
 | Subagent from `subagent_fork` | Inherits the parent's message. It gets a one-time notice telling it to ignore that message |
 
-The files are read again on every injection, so edits apply without a restart. A missing file produces one warning and is skipped. Each injected message is persisted as a `user/message` with source `{ kind: "session-context", form: "instructions", trigger }`.
+The files and skills are read again on every injection, so edits apply without a restart. A missing file produces one warning and is skipped. Each injected message is persisted as a `user/message` with source `{ kind: "session-context", form: "instructions", trigger }`.
 
 ## Configuration
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `files` | `[]` | Absolute paths (`~/` allowed), joined in order. |
+| `skills` | `[]` | Skill names injected after the files. Each is rendered exactly as dsh renders a `/name` invocation (`<skill_content>`), so the model sees the same block as when it loads the skill itself. |
 | `sources` | `[startup, resume, compact]` | Which of `startup`, `resume`, and `compact` inject. Drop `resume` to leave sessions that predate the plugin, or were migrated from another agent, without the context. |
 | `rootOnly` | `true` | Skip subagents (sessions with `delegationDepth > 0`). |
-| `template` | `<session-context>\n{content}\n</session-context>` | Wrapper text. `{content}` is replaced by the file contents. |
+| `template` | `<session-context>\n{content}\n</session-context>` | Wrapper text for `files`. `{content}` is replaced by the file contents. Skills are not wrapped. |
 | `subagentNotice` | see `index.js` | Notice for forked subagents that inherited the message. Set it to `''` to disable. |
 
 ## Install
